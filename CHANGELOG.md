@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.1
+- Add better logging for message send failures
+
 ## 1.1.0
 - Add pipeline support
 - Fix Build Step blocking concurrent jobs
