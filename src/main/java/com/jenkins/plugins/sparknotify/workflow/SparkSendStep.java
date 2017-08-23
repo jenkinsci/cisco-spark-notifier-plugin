@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 
 import javax.inject.Inject;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.apache.commons.collections.CollectionUtils;
@@ -47,7 +48,7 @@ public class SparkSendStep extends AbstractStepImpl {
 
 	private final String message;
 	private String messageType;
-	private String credentialsId;
+	private final String credentialsId;
 	private List<SparkSpace> spaceList;
 	private boolean disable;
 	private boolean failOnError;
@@ -150,9 +151,10 @@ public class SparkSendStep extends AbstractStepImpl {
 			for (int i = 0; i < step.spaceList.size(); i++) {
 				listener.getLogger().println("Sending message to spark space: " + step.spaceList.get(i).getSpaceId());
 				try {
-					int responseCode = notifier.sendMessage(step.spaceList.get(i).getSpaceId(), step.getMessage(), sparkMessageType);
-					if (responseCode != Status.OK.getStatusCode()) {
-						String error = "Could not send message; response code: " + responseCode;
+					Response response = notifier.sendMessage(step.spaceList.get(i).getSpaceId(), step.getMessage(), sparkMessageType);
+					if (response.getStatus() != Status.OK.getStatusCode()) {
+						String error = "Could not send message; HTTP response: " + response.getStatus() + "\n"
+								+ response.readEntity(String.class);
 						if (step.failOnError) {
 							throw new AbortException(error);
 						}
@@ -172,7 +174,7 @@ public class SparkSendStep extends AbstractStepImpl {
 					}
 					listener.getLogger().println(error);
 				} catch (RuntimeException e) {
-					String error = "Could not send message because of an unknown issue; please file an issue";
+					String error = "Could not send message because of an unknown issue; please file an issue\n" + e.getMessage();
 					if (step.failOnError) {
 						throw new AbortException(error);
 					}
@@ -211,7 +213,7 @@ public class SparkSendStep extends AbstractStepImpl {
 			}
 			return new StandardListBoxModel().withEmptySelection().withMatching(
 					CredentialsMatchers.instanceOf(StringCredentials.class), CredentialsProvider.lookupCredentials(
-							StringCredentials.class, owner, ACL.SYSTEM, Collections.<DomainRequirement>emptyList()));
+							StringCredentials.class, owner, ACL.SYSTEM, Collections.<DomainRequirement> emptyList()));
 		}
 
 		public ListBoxModel doFillMessageTypeItems(@QueryParameter final String messageType) {

@@ -32,20 +32,20 @@ public class SparkNotifier {
 		this.env = env;
 	}
 
-	public int sendMessage(final String roomId, String message, final SparkMessageType messageType) throws IOException {
+	public Response sendMessage(final String roomId, String message, final SparkMessageType messageType) throws IOException {
 		if (env != null) {
 			message = replaceEnvVars(message, env);
 		}
 
-		SparkMessage messageData = new SparkMessageBuilder().roomId(roomId).message(message).messageType(messageType)
+		SparkMessage messageData = new SparkMessageBuilder().roomId(roomId)
+				.message(message)
+				.messageType(messageType)
 				.build();
 
-		Response response = DEFAULT_CLIENT.target(SPARK_MSG_POST_URL)
+		return DEFAULT_CLIENT.target(SPARK_MSG_POST_URL)
 				.request(MediaType.APPLICATION_JSON)
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + getToken())
 				.post(Entity.json(messageData));
-
-		return response.getStatus();
 	}
 
 	private String getToken() throws SparkNotifyException {

@@ -5,6 +5,7 @@ import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.apache.commons.collections.CollectionUtils;
@@ -161,9 +162,10 @@ public class SparkNotifyBuilder extends Builder {
 		for (int k = 0; k < roomList.size(); k++) {
 			listener.getLogger().println("Sending message to spark space: " + roomList.get(k).getRId());
 			try {
-				int responseCode = notifier.sendMessage(roomList.get(k).getRId(), message, sparkMessageType);
-				if (responseCode != Status.OK.getStatusCode()) {
-					listener.getLogger().println("Could not send message; response code: " + responseCode);
+				Response response = notifier.sendMessage(roomList.get(k).getRId(), message, sparkMessageType);
+				if (response.getStatus() != Status.OK.getStatusCode()) {
+					listener.getLogger().println(
+							"Could not send message; HTTP response: " + response.getStatus() + "\n" + response.readEntity(String.class));
 				} else {
 					listener.getLogger().println("Message sent");
 				}
@@ -174,7 +176,7 @@ public class SparkNotifyBuilder extends Builder {
 				listener.getLogger().println(e.getMessage());
 			} catch (RuntimeException e) {
 				listener.getLogger().println(
-						"Could not send message because of an unknown issue; please file an issue");
+						"Could not send message because of an unknown issue; please file an issue\n" + e.getMessage());
 			}
 		}
 

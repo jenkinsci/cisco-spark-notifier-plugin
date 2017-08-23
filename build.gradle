@@ -8,10 +8,6 @@ buildscript {
 	}
 }
 
-group = "org.jenkins-ci.plugins"
-version = "1.1.0"
-description = "Notify Cisco Spark spaces from build, post-build and pipeline steps"
-
 apply plugin: "org.jenkins-ci.jpi"
 apply plugin: "eclipse"
 
@@ -29,6 +25,10 @@ jenkinsPlugin {
 		}
 	}
 }
+
+group = "org.jenkins-ci.plugins"
+version = "1.1.1"
+description = "Notify Cisco Spark spaces from build, post-build and pipeline steps"
 
 ext {
 	workflowVersion = "1.11"
@@ -60,5 +60,5 @@ sourceCompatibility = "1.7"
 targetCompatibility = "1.7"
 
 task wrapper(type: Wrapper) {
-	gradleVersion = "3.5"
+	gradleVersion = "4.1"
 }
