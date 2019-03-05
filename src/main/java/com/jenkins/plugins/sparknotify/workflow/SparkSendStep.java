@@ -1,7 +1,6 @@
 package com.jenkins.plugins.sparknotify.workflow;
 
 import java.io.IOException;
-import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -27,11 +26,11 @@ import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.cloudbees.plugins.credentials.domains.DomainRequirement;
-import com.jenkins.plugins.sparknotify.SparkMessage;
-import com.jenkins.plugins.sparknotify.SparkMessageType;
-import com.jenkins.plugins.sparknotify.SparkNotifier;
-import com.jenkins.plugins.sparknotify.SparkNotifyException;
-import com.jenkins.plugins.sparknotify.SparkSpace;
+import com.jenkins.plugins.sparknotify.Messages;
+import com.jenkins.plugins.sparknotify.beans.SparkMessage;
+import com.jenkins.plugins.sparknotify.beans.SparkSpace;
+import com.jenkins.plugins.sparknotify.enums.SparkMessageType;
+import com.jenkins.plugins.sparknotify.services.SparkNotifier;
 
 import hudson.AbortException;
 import hudson.EnvVars;
@@ -118,28 +117,24 @@ public class SparkSendStep extends AbstractStepImpl {
 		@Override
 		protected Void run() throws IOException, InterruptedException {
 			if (step.disable) {
-				listener.getLogger().println("Spark Notifier Plugin Disabled!");
+				listener.getLogger().println(Messages.Disabled());
 				return null;
 			}
 
 			if (!SparkMessage.isMessageValid(step.getMessage())) {
-				String error = "Skipping spark notifications because no message was defined";
 				if (step.failOnError) {
-					throw new AbortException(error);
+					throw new AbortException(Messages.MessageNotNull());
 				}
-				listener.getLogger().println(error);
+				listener.getLogger().println(Messages.SkipNoMessage());
 				return null;
 			}
-
 			if (CollectionUtils.isEmpty(step.spaceList)) {
-				String error = "Skipping spark notifications because no spaces were defined";
 				if (step.failOnError) {
-					throw new AbortException(error);
+					throw new AbortException(Messages.SpacesNotEmpty());
 				}
-				listener.getLogger().println(error);
+				listener.getLogger().println(Messages.SkipNoSpaces());
 				return null;
 			}
-
 			if (StringUtils.isEmpty(step.messageType)) {
 				step.messageType = "text";
 			}
@@ -148,37 +143,24 @@ public class SparkSendStep extends AbstractStepImpl {
 
 			SparkNotifier notifier = new SparkNotifier(getCredentials(step.credentialsId, getContext().get(Run.class)), envVars);
 
-			for (int i = 0; i < step.spaceList.size(); i++) {
-				listener.getLogger().println("Sending message to spark space: " + step.spaceList.get(i).getSpaceId());
+			for (SparkSpace space : step.spaceList) {
+				listener.getLogger().println(Messages.SendingMessage(space.getSpaceId()));
 				try {
-					Response response = notifier.sendMessage(step.spaceList.get(i).getSpaceId(), step.getMessage(), sparkMessageType);
+					Response response = notifier.sendMessage(space.getSpaceId(), step.getMessage(), sparkMessageType);
 					if (response.getStatus() != Status.OK.getStatusCode()) {
-						String error = "Could not send message; HTTP response: " + response.getStatus() + "\n"
-								+ response.readEntity(String.class);
+						String error = Messages.ErrorHttpResponse(response.getStatus(), response.readEntity(String.class));
 						if (step.failOnError) {
 							throw new AbortException(error);
 						}
-						listener.getLogger().println(error);
+						listener.error(error);
 					} else {
-						listener.getLogger().println("Message sent");
+						listener.getLogger().println(Messages.MessageSent());
 					}
-				} catch (SparkNotifyException e) {
+				} catch (IOException | RuntimeException e) {
 					if (step.failOnError) {
-						throw new AbortException(e.getMessage());
+						throw new AbortException(Messages.ErrorException(e));
 					}
-					listener.getLogger().println(e.getMessage());
-				} catch (SocketException e) {
-					String error = "Could not send message because spark server did not provide a response; this is likely intermittent";
-					if (step.failOnError) {
-						throw new AbortException(error);
-					}
-					listener.getLogger().println(error);
-				} catch (RuntimeException e) {
-					String error = "Could not send message because of an unknown issue; please file an issue\n" + e.getMessage();
-					if (step.failOnError) {
-						throw new AbortException(error);
-					}
-					listener.getLogger().println(error);
+					listener.error(Messages.ErrorException(e));
 				}
 			}
 
@@ -199,12 +181,12 @@ public class SparkSendStep extends AbstractStepImpl {
 
 		@Override
 		public String getFunctionName() {
-			return "sparkSend";
+			return Messages.StepName();
 		}
 
 		@Override
 		public String getDisplayName() {
-			return "Send spark message";
+			return Messages.DisplayName();
 		}
 
 		public ListBoxModel doFillCredentialsIdItems(@AncestorInPath final Item owner) {
@@ -226,7 +208,7 @@ public class SparkSendStep extends AbstractStepImpl {
 			if (SparkMessage.isMessageValid(message)) {
 				return FormValidation.ok();
 			} else {
-				return FormValidation.error("Message cannot be null");
+				return FormValidation.error(Messages.InvalidMessage());
 			}
 		}
 
@@ -234,7 +216,7 @@ public class SparkSendStep extends AbstractStepImpl {
 			if (SparkMessage.isRoomIdValid(spaceId)) {
 				return FormValidation.ok();
 			} else {
-				return FormValidation.error("Invalid spaceId; see help message");
+				return FormValidation.error(Messages.InvalidSpaceId());
 			}
 		}
 	}

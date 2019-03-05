@@ -1,4 +1,4 @@
-package com.jenkins.plugins.sparknotify;
+package com.jenkins.plugins.sparknotify.enums;
 
 public enum SparkMessageType {
 	TEXT("text"),

@@ -1,7 +1,6 @@
 package com.jenkins.plugins.sparknotify;
 
 import java.io.IOException;
-import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,6 +21,9 @@ import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.cloudbees.plugins.credentials.domains.URIRequirementBuilder;
+import com.jenkins.plugins.sparknotify.beans.SparkMessage;
+import com.jenkins.plugins.sparknotify.enums.SparkMessageType;
+import com.jenkins.plugins.sparknotify.services.SparkNotifier;
 
 import hudson.EnvVars;
 import hudson.Extension;
@@ -134,7 +136,7 @@ public class SparkNotifyBuilder extends Builder {
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)
 			throws InterruptedException, IOException {
 		if (disable) {
-			listener.getLogger().println("Spark Notifier Plugin Disabled!");
+			listener.getLogger().println(Messages.Disabled());
 			return true;
 		}
 
@@ -142,7 +144,7 @@ public class SparkNotifyBuilder extends Builder {
 
 		String message = getMessageContent();
 		if (!SparkMessage.isMessageValid(message)) {
-			listener.getLogger().println("Skipping spark notifications because no message was defined");
+			listener.getLogger().println(Messages.SkipNoMessage());
 			return true;
 		}
 
@@ -151,7 +153,7 @@ public class SparkNotifyBuilder extends Builder {
 		}
 
 		if (CollectionUtils.isEmpty(roomList)) {
-			listener.getLogger().println("Skipping spark notifications because no spaces were defined");
+			listener.getLogger().println(Messages.SkipNoSpaces());
 			return true;
 		}
 
@@ -159,24 +161,17 @@ public class SparkNotifyBuilder extends Builder {
 
 		SparkNotifier notifier = new SparkNotifier(getCredentials(credentialsId, build), envVars);
 
-		for (int k = 0; k < roomList.size(); k++) {
-			listener.getLogger().println("Sending message to spark space: " + roomList.get(k).getRId());
+		for (SparkRoom room : roomList) {
+			listener.getLogger().println(Messages.SendingMessage(StringUtils.isNotEmpty(room.getRName()) ? room.getRName() : room.getRId()));
 			try {
-				Response response = notifier.sendMessage(roomList.get(k).getRId(), message, sparkMessageType);
+				Response response = notifier.sendMessage(room.getRId(), message, sparkMessageType);
 				if (response.getStatus() != Status.OK.getStatusCode()) {
-					listener.getLogger().println(
-							"Could not send message; HTTP response: " + response.getStatus() + "\n" + response.readEntity(String.class));
+					listener.error(Messages.ErrorHttpResponse(response.getStatus(), response.readEntity(String.class)));
 				} else {
-					listener.getLogger().println("Message sent");
+					listener.getLogger().println(Messages.MessageSent());
 				}
-			} catch (SocketException e) {
-				listener.getLogger().println(
-						"Could not send message because spark server did not provide a response; this is likely intermittent");
-			} catch (SparkNotifyException e) {
-				listener.getLogger().println(e.getMessage());
-			} catch (RuntimeException e) {
-				listener.getLogger().println(
-						"Could not send message because of an unknown issue; please file an issue\n" + e.getMessage());
+			} catch (IOException | RuntimeException e) {
+				listener.error(Messages.ErrorException(e));
 			}
 		}
 
@@ -214,7 +209,7 @@ public class SparkNotifyBuilder extends Builder {
 			if (SparkMessage.isMessageValid(message)) {
 				return FormValidation.ok();
 			} else {
-				return FormValidation.error("Message cannot be null");
+				return FormValidation.error(Messages.InvalidMessage());
 			}
 		}
 
@@ -222,7 +217,7 @@ public class SparkNotifyBuilder extends Builder {
 			if (SparkMessage.isRoomIdValid(roomId)) {
 				return FormValidation.ok();
 			} else {
-				return FormValidation.error("Invalid spaceId; see help message");
+				return FormValidation.error(Messages.InvalidSpaceId());
 			}
 		}
 
@@ -254,7 +249,7 @@ public class SparkNotifyBuilder extends Builder {
 		 */
 		@Override
 		public String getDisplayName() {
-			return "Notify Spark Rooms";
+			return Messages.DisplayName();
 		}
 	}
 

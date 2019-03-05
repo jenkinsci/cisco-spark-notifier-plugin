@@ -13,13 +13,13 @@ apply plugin: "eclipse"
 
 jenkinsPlugin {
 	coreVersion = "1.580.1"
-	displayName = "Cisco Spark Notifier"
+	displayName = "Webex Teams Notifier"
 	shortName = "cisco-spark-notifier"
 	url = "https://wiki.jenkins-ci.org/display/JENKINS/Spark+Notifier+Plugin"
 	gitHubUrl = "https://github.com/jenkinsci/cisco-spark-notifier-plugin"
 	developers {
 		developer {
-			id "taypatto"
+			id "taylorp36"
 			name "Taylor Patton"
 			email "taylorp36@gmail.com"
 		}
@@ -27,7 +27,7 @@ jenkinsPlugin {
 }
 
 group = "org.jenkins-ci.plugins"
-version = "1.1.1"
+version = "1.2.0"
 description = "Notify Cisco Spark spaces from build, post-build and pipeline steps"
 
 ext {
@@ -41,12 +41,15 @@ repositories {
 dependencies {
 	compile "com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider:2.7.4"
 	compile "javax.ws.rs:javax.ws.rs-api:2.0.1"
+	compile "org.apache.commons:commons-collections4:4.1"
+	compile "org.apache.commons:commons-lang3:3.7"
 
 	jenkinsPlugins "org.jenkins-ci.plugins.workflow:workflow-cps:${workflowVersion}@jar"
 	jenkinsPlugins "org.jenkins-ci.plugins.workflow:workflow-job:${workflowVersion}@jar"
 	jenkinsPlugins "org.jenkins-ci.plugins.workflow:workflow-step-api:${workflowVersion}@jar"
 	jenkinsPlugins "org.jenkins-ci.plugins:credentials:1.25@jar"
 	jenkinsPlugins "org.jenkins-ci.plugins:plain-credentials:1.2@jar"
+	jenkinsPlugins "org.jenkins-ci.plugins:junit:1.15@jar"
 
 	optionalJenkinsPlugins "org.jenkins-ci.plugins:envinject:1.92.1@jar"
 

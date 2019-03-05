@@ -1,9 +1,9 @@
 package com.jenkins.plugins.sparknotify;
 
 import java.io.IOException;
-import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Logger;
 
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
@@ -22,6 +22,15 @@ import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.cloudbees.plugins.credentials.domains.URIRequirementBuilder;
+import com.jenkins.plugins.sparknotify.beans.SparkMessage;
+import com.jenkins.plugins.sparknotify.beans.TestResult;
+import com.jenkins.plugins.sparknotify.enums.SparkMessageType;
+import com.jenkins.plugins.sparknotify.services.HtmlTestResultService;
+import com.jenkins.plugins.sparknotify.services.MarkdownTestResultService;
+import com.jenkins.plugins.sparknotify.services.SparkNotifier;
+import com.jenkins.plugins.sparknotify.services.TestResultService;
+import com.jenkins.plugins.sparknotify.services.TextTestResultService;
+import com.jenkins.plugins.sparknotify.utils.MessageConst;
 
 import hudson.EnvVars;
 import hudson.Extension;
@@ -33,23 +42,24 @@ import hudson.model.AbstractProject;
 import hudson.model.BuildListener;
 import hudson.model.Descriptor;
 import hudson.model.Job;
+import hudson.model.Result;
 import hudson.model.Run;
 import hudson.security.ACL;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
+import hudson.tasks.Notifier;
 import hudson.tasks.Publisher;
-import hudson.tasks.Recorder;
+import hudson.tasks.junit.TestResultAction;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.ListBoxModel.Option;
 import net.sf.json.JSONObject;
 
-public class SparkNotifyPostBuilder extends Recorder {
+public class SparkNotifyPostBuilder extends Notifier {
+	private static final Logger LOG = Logger.getLogger(SparkNotifyPostBuilder.class.getName());
 
-	private static final String JOB_FAILURE = "FAILURE";
-	private static final String JOB_SUCCESS = "SUCCESS";
-	private static final String JOB_ABORTED = "ABORTED";
-	private static final String JOB_UNSTABLE = "UNSTABLE";
+	// the maximum spark message size is 7439 characters before encrypted, 10000 characters after encrypted
+	private static final int MAXIUMUM_TEST_RESULT_SIZE = 7250;
 
 	private List<SparkRoom> roomList;
 	private final boolean disable;
@@ -61,6 +71,9 @@ public class SparkNotifyPostBuilder extends Recorder {
 	private String messageType;
 	private String messageContent;
 	private String credentialsId;
+	private boolean skipOnEmptyTest;
+	private boolean testSummary;
+	private boolean testDetails;
 
 	/**
 	 * @deprecated Backwards compatibility; please use SparkSpace
@@ -157,6 +170,33 @@ public class SparkNotifyPostBuilder extends Recorder {
 		this.credentialsId = Util.fixEmpty(credentialsId);
 	}
 
+	public boolean isSkipOnEmptyTest() {
+		return skipOnEmptyTest;
+	}
+
+	@DataBoundSetter
+	public void setSkipOnEmptyTest(final boolean skipOnEmptyTest) {
+		this.skipOnEmptyTest = skipOnEmptyTest;
+	}
+
+	public boolean isTestSummary() {
+		return testSummary;
+	}
+
+	@DataBoundSetter
+	public void setTestSummary(final boolean testSummary) {
+		this.testSummary = testSummary;
+	}
+
+	public boolean isTestDetails() {
+		return testDetails;
+	}
+
+	@DataBoundSetter
+	public void setTestDetails(final boolean testDetails) {
+		this.testDetails = testDetails;
+	}
+
 	/**
 	 * @see hudson.tasks.BuildStepCompatibilityLayer#perform(hudson.model.AbstractBuild,
 	 *      hudson.Launcher, hudson.model.BuildListener)
@@ -179,27 +219,27 @@ public class SparkNotifyPostBuilder extends Recorder {
 		}
 
 		String result = build.getResult().toString();
-		if (result != null && !result.toString().isEmpty()) {
-			message = message.replace("${BUILD_RESULT}", result);
+		if (StringUtils.isNotEmpty(result)) {
+			message = message.replace(MessageConst.BUILD_RESULT, result);
 		} else {
-			listener.getLogger().println("Could not get result");
-			result = "";
+			listener.error(Messages.NoBuildResult());
+			result = StringUtils.EMPTY;
 		}
 
-		if (skipOnSuccess && result.equals(JOB_SUCCESS)) {
-			listener.getLogger().println("Skipping spark notifications because job was successful");
+		if (skipOnSuccess && result.equals(Result.SUCCESS.toString())) {
+			listener.getLogger().println(Messages.SkipSuccess());
 			return true;
 		}
-		if (skipOnFailure && result.equals(JOB_FAILURE)) {
-			listener.getLogger().println("Skipping spark notifications because job failed");
+		if (skipOnFailure && result.equals(Result.FAILURE.toString())) {
+			listener.getLogger().println(Messages.SkipFailed());
 			return true;
 		}
-		if (skipOnAborted && result.equals(JOB_ABORTED)) {
-			listener.getLogger().println("Skipping spark notifications because job was aborted");
+		if (skipOnAborted && result.equals(Result.ABORTED.toString())) {
+			listener.getLogger().println(Messages.SkipAborted());
 			return true;
 		}
-		if (skipOnUnstable && result.equals(JOB_UNSTABLE)) {
-			listener.getLogger().println("Skipping spark notifications because job is unstable");
+		if (skipOnUnstable && result.equals(Result.UNSTABLE.toString())) {
+			listener.getLogger().println(Messages.SkipUnstable());
 			return true;
 		}
 
@@ -208,32 +248,40 @@ public class SparkNotifyPostBuilder extends Recorder {
 		}
 
 		if (CollectionUtils.isEmpty(roomList)) {
-			listener.getLogger().println("Skipping spark notifications because no rooms were defined");
+			listener.getLogger().println(Messages.SkipNoSpaces());
 			return true;
 		}
 
 		SparkMessageType sparkMessageType = SparkMessageType.valueOf(messageType.toUpperCase());
 
+		if (testSummary || testDetails || skipOnEmptyTest) {
+			TestResultAction testResultAction = build.getAction(TestResultAction.class);
+			if (testResultAction == null) {
+				LOG.warning("Test results not found");
+				if (skipOnEmptyTest) {
+					listener.getLogger().println(Messages.SkipNoTestResults());
+					return true;
+				}
+			} else if (testSummary || testDetails) {
+				TestResult testResult = new TestResult(testResultAction, testSummary, testDetails);
+				TestResultService testResultService = getTestResultService(testResult, sparkMessageType);
+				message = testResultService.appendMessageWithTestInformation(message);
+			}
+		}
+
 		SparkNotifier notifier = new SparkNotifier(getCredentials(credentialsId, build), envVars);
 
-		for (int k = 0; k < roomList.size(); k++) {
-			listener.getLogger().println("Sending message to Spark Room: " + roomList.get(k).getRId());
+		for (SparkRoom room : roomList) {
+			listener.getLogger().println(Messages.SendingMessage(StringUtils.isNotEmpty(room.getRName()) ? room.getRName() : room.getRId()));
 			try {
-				Response response = notifier.sendMessage(roomList.get(k).getRId(), message, sparkMessageType);
+				Response response = notifier.sendMessage(room.getRId(), message, sparkMessageType);
 				if (response.getStatus() != Status.OK.getStatusCode()) {
-					listener.getLogger().println(
-							"Could not send message; HTTP response: " + response.getStatus() + "\n" + response.readEntity(String.class));
+					listener.error(Messages.ErrorHttpResponse(response.getStatus(), response.readEntity(String.class)));
 				} else {
-					listener.getLogger().println("Message sent");
+					listener.getLogger().println(Messages.MessageSent());
 				}
-			} catch (SocketException e) {
-				listener.getLogger().println(
-						"Could not send message because ppark server did not provide a response; this is likely intermittent");
-			} catch (SparkNotifyException e) {
-				listener.getLogger().println(e.getMessage());
-			} catch (RuntimeException e) {
-				listener.getLogger().println(
-						"Could not send message because of an unknown issue; please file an issue\n" + e.getMessage());
+			} catch (IOException | RuntimeException e) {
+				listener.error(Messages.ErrorException(e));
 			}
 		}
 
@@ -276,7 +324,7 @@ public class SparkNotifyPostBuilder extends Recorder {
 			if (SparkMessage.isMessageValid(message)) {
 				return FormValidation.ok();
 			} else {
-				return FormValidation.error("Message cannot be null");
+				return FormValidation.error(Messages.MessageNotNull());
 			}
 		}
 
@@ -284,7 +332,7 @@ public class SparkNotifyPostBuilder extends Recorder {
 			if (SparkMessage.isRoomIdValid(roomId)) {
 				return FormValidation.ok();
 			} else {
-				return FormValidation.error("Invalid spaceId; see help message");
+				return FormValidation.error(Messages.InvalidSpaceId());
 			}
 		}
 
@@ -316,11 +364,28 @@ public class SparkNotifyPostBuilder extends Recorder {
 		 */
 		@Override
 		public String getDisplayName() {
-			return "Notify Spark Rooms";
+			return Messages.DisplayName();
 		}
 	}
 
 	private Credentials getCredentials(final String credentialsId, final Run<?, ?> build) {
 		return CredentialsProvider.findCredentialById(credentialsId, StringCredentials.class, build);
+	}
+
+	private TestResultService getTestResultService(final TestResult testResult, final SparkMessageType messageType) {
+		TestResultService testResultService;
+		switch (messageType) {
+		case MARKDOWN:
+			testResultService = new MarkdownTestResultService(testResult, MAXIUMUM_TEST_RESULT_SIZE);
+			break;
+		case HTML:
+			testResultService = new HtmlTestResultService(testResult, MAXIUMUM_TEST_RESULT_SIZE);
+			break;
+		case TEXT:
+		default:
+			testResultService = new TextTestResultService(testResult, MAXIUMUM_TEST_RESULT_SIZE);
+			break;
+		}
+		return testResultService;
 	}
 }

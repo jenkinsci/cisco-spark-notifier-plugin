@@ -41,6 +41,15 @@
         <f:entry title="${%Skip On Unstable}" field="skipOnUnstable">
             <f:checkbox  checked="${it.skipOnUnstable}"/>
         </f:entry>
+        <f:entry title="${%Skip On Empty Test Results}" field="skipOnEmptyTest">
+            <f:checkbox  checked="${it.skipOnEmptyTest}"/>
+        </f:entry>
+        <f:entry title="${%Test Summary}" field="testSummary">
+            <f:checkbox  checked="${it.testSummary}"/>
+        </f:entry>
+        <f:entry title="${%Test Failure Details}" field="testDetails">
+            <f:checkbox  checked="${it.testDetails}"/>
+        </f:entry>
         <f:entry title="${%Disable}" field="disable">
             <f:checkbox  checked="${it.disable}"/>
         </f:entry>

@@ -1,9 +1,12 @@
-package com.jenkins.plugins.sparknotify;
+package com.jenkins.plugins.sparknotify.beans;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import org.apache.commons.codec.binary.Base64;
+
+import com.jenkins.plugins.sparknotify.SparkNotifyException;
+import com.jenkins.plugins.sparknotify.enums.SparkMessageType;
 
 public class SparkMessage {
 	private final static String ROOM_ID_PREFIX = "ciscospark://us/ROOM/";

@@ -1,4 +1,4 @@
-package com.jenkins.plugins.sparknotify;
+package com.jenkins.plugins.sparknotify.beans;
 
 import org.kohsuke.stapler.DataBoundConstructor;
 
