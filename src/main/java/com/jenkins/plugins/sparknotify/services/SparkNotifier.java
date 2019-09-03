@@ -25,7 +25,7 @@ import hudson.EnvVars;
 public class SparkNotifier {
 	private static final String SPARK_MSG_POST_URL = "https://api.ciscospark.com/v1/messages";
 	private static final Pattern ENV_PATTERN_WORKFLOW = Pattern.compile("\\$\\{env\\.(.+?)\\}");
-	private static Client DEFAULT_CLIENT = null;
+	private static final Client DEFAULT_CLIENT = ClientBuilder.newBuilder().register(JacksonJsonProvider.class).build();
 
 	private final Credentials credentials;
 	private final EnvVars env;
@@ -33,14 +33,6 @@ public class SparkNotifier {
 	public SparkNotifier(final Credentials credentials, final EnvVars env) {
 		this.credentials = credentials;
 		this.env = env;
-		try {
-			SSLContext sc = SSLContext.getInstance("TLSv1.2");
-			sc.init(null, null, null);
-			DEFAULT_CLIENT = ClientBuilder.newBuilder().sslContext(sc).register(JacksonJsonProvider.class).build();
-		}
-		catch (Exception e) {
-			DEFAULT_CLIENT = ClientBuilder.newBuilder().register(JacksonJsonProvider.class).build();
-		}
 	}
 
 	public Response sendMessage(final String roomId, String message, final SparkMessageType messageType) throws IOException {
